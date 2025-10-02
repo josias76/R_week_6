@@ -1,0 +1,117 @@
+---
+title: "Atelier 6 : Regroupement, Résumé et Visualisation"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    toc: true
+    number_sections: true
+author: "Ntumba Nkengesha Nella"
+date: "21-09-2025"
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Préparation des données
+
+Pour commencer, **chargez les packages nécessaires** : {tidyverse}, {here}, {janitor}, et {esquisse}.
+
+```{r}
+# Charger paquets
+library(tidyverse)
+library(here)
+library(janitor)
+library(esquisse)
+```
+
+Maintenant, **lisez le jeu de données dans R**. Le dataframe que vous importez devrait avoir 880 lignes et 21 colonnes. 
+
+```{r}
+# Import CSV
+tb_brut <- read_csv(here("data", "inde_tuberculose.csv"))
+
+# Vérifiez que les données importées semblent correctes
+head(tb_brut)
+```
+
+Les noms de nombreuses colonnes dans ce jeu de données contiennent des espaces et des symboles.
+Utilisez `janitor::clean_names()` pour donner à vos noms de variables un format propre et cohérent.
+
+```{r}
+# Nettoyer les noms de variables
+tb_renomme <- tb_brut %>% clean_names()
+
+# Vérification
+dim(tb_renomme)
+names(tb_renomme)
+```
+
+Examinons la variable `education` :
+
+```{r}
+tb_renomme %>% count(education)
+```
+
+Convertissons `education` en facteur avec un ordre chronologique :
+
+```{r}
+tb_propre <- tb_renomme %>%
+  mutate(education = factor(education,
+                            levels = c("Pas d'éducation",
+                                       "Primaire",
+                                       "Intermédiaire",
+                                       "Secondaire",
+                                       "Secondaire  supérieur",
+                                       "Diplômé",
+                                       "Diplômé et plus",
+                                       "Manquant")))
+```
+
+# Investigation des coûts de santé
+
+## Étape 1 : Calculer une variable `cout_total`
+
+```{r}
+tb_propre2 <- tb_propre %>%
+  mutate(cout_total = premiere_visite_cout + deuxieme_visite_cout + troisieme_visite_cout)
+```
+
+## Étape 2 : Résumer les coûts par groupe
+
+```{r}
+tableau_cout_edu <- tb_propre2 %>% 
+  group_by(education) %>%
+  summarise(n = n(),
+            cout_moyen = mean(cout_total, na.rm = TRUE)) %>%
+  arrange(desc(cout_moyen))
+
+tableau_cout_edu
+```
+
+# Visualiser les données avec {esquisse}
+
+```{r}
+ggplot(tableau_cout_edu, aes(x = reorder(education, -cout_moyen), y = cout_moyen)) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Coût moyen du traitement par niveau d'éducation",
+       x = "Niveau d'éducation",
+       y = "Coût moyen (Rs)") +
+  theme_minimal()
+
+# Sauvegarde du graphique
+ggsave(here("outputs", "cout_par_education.png"), width = 8, height = 6)
+```
+
+# Défi Bonus : Comparaison public vs privé
+
+```{r}
+tb_propre3 <- tb_propre2 %>% 
+  mutate(type_premiere_visite = case_when(
+    str_detect(premiere_visite_emplacement, "Pvt") ~ "Privé",
+    TRUE ~ "Public"))
+
+tb_propre3 %>%
+  group_by(type_premiere_visite) %>%
+  summarise(delai_moyen = mean(delai_initiation_traitement_en_jours, na.rm = TRUE),
+            retard_moyen = mean(retard_sys_sante_en_jours, na.rm = TRUE),
+            n = n())
+```
